@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KDE, visually</title>
+  <meta name="description" content="Kernel density estimation: build a pdf
+    from samples by averaging a bump on each one. Drag a few samples, compare
+    bins with bumps, and choose the bandwidth by held-out log-likelihood.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 27 C7 27 8 9 12 9 S15 21 18 21 S21 13 24 13 S28 27 30 27' fill='none' stroke='%237c3aed' stroke-width='2.6'/%3E%3Cpath d='M2 29 H30' stroke='%23334155' stroke-width='1.6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>KDE, visually</h1>
+    <p class="sub">Build a pdf from the samples themselves: put a bump on
+      every sample and average them. No shape assumed; one knob, the
+      bandwidth <i>h</i>.</p>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-mode="bumps">A few samples</button>
+      <button class="tab" role="tab" data-mode="bins">Bins vs. bumps</button>
+      <button class="tab" role="tab" data-mode="cv">Choosing <i>h</i></button>
+    </nav>
+  </header>
+
+  <section class="intro card">
+    <div data-show="bumps">
+      <h2>An average of <i>n</i> bumps</h2>
+      <p class="goal"><b>Goal:</b> estimate the pdf that samples
+        <i>x</i><sub>1</sub>, ..., <i>x<sub>n</sub></i> came from, without
+        assuming its shape (Gaussian, exponential, ...).</p>
+      <p class="goal approach"><b>Approach:</b> (Rosenblatt 1956; Parzen
+        1962) center a kernel <i>K</i>, any pdf centered at 0, on every
+        sample, stretch it by the bandwidth <i>h</i>, and average.</p>
+      <div class="formula">
+        <i>p̂</i>(<i>x</i>) = <span class="frac"><span>1</span><span><i>n</i></span></span>
+        &sum;<sub><i>i</i></sub> <i>K<sub>h</sub></i>(<i>x</i> &minus;
+        <i>x<sub>i</sub></i>),
+        <span class="nowrap">&nbsp; <i>K<sub>h</sub></i>(<i>u</i>) =
+        <span class="frac"><span>1</span><span><i>h</i></span></span>
+        <i>K</i>(<i>u</i>/<i>h</i>)</span>
+      </div>
+      <p class="muted">Dividing by <i>h</i> keeps each bump's area at 1, so
+        the average of <i>n</i> bumps has area 1 too: <i>p̂</i> is a pdf.
+        With the Gaussian <i>K</i>, <i>K<sub>h</sub></i>(<i>x</i> &minus;
+        <i>x<sub>i</sub></i>) is the <i>N</i>(<i>x<sub>i</sub></i>,
+        <i>h</i><sup>2</sup>) pdf: <i>h</i> is each bump's standard
+        deviation.</p>
+    </div>
+
+    <div data-show="bins">
+      <h2>Bins vs. bumps</h2>
+      <p class="goal"><b>Goal:</b> the same estimate from many samples of a
+        pdf we know (dashed), so each estimate can be checked against the
+        truth.</p>
+      <p class="goal approach"><b>Approach:</b> a histogram counts the
+        samples in <i>x</i>'s bin, with bins fixed in advance; a KDE
+        averages a bump on each sample, so nothing is fixed but
+        <i>h</i>.</p>
+      <div class="formula">
+        histogram: <i>p̂</i>(<i>x</i>) = <span class="frac"><span>#
+        samples in <i>x</i>'s bin</span><span><i>n w</i></span></span>
+        <span class="implies">vs.</span>
+        <span class="nowrap">KDE: <i>p̂</i>(<i>x</i>) = <span
+        class="frac"><span>1</span><span><i>n</i></span></span>
+        &sum;<sub><i>i</i></sub> <i>K<sub>h</sub></i>(<i>x</i> &minus;
+        <i>x<sub>i</sub></i>)</span>
+      </div>
+      <p class="muted"><i>w</i> is the bin width. "Distance from the truth"
+        is &frac12;&int;|<i>p̂</i> &minus; <i>p</i>| <i>d</i><i>x</i>: 0 for
+        a perfect estimate, 1 when the two share no area. In practice the
+        truth is unknown, which is what the next tab is about.</p>
+    </div>
+
+    <div data-show="cv">
+      <h2>Choosing <i>h</i>: held-out log-likelihood</h2>
+      <p class="goal"><b>Goal:</b> pick the <i>h</i> whose <i>p̂</i> makes
+        data it never saw most probable, using only the samples.</p>
+      <p class="goal approach"><b>Approach:</b> <i>k</i>-fold
+        cross-validation. Build <i>p̂</i><sub>&minus;<i>j</i></sub> from
+        every fold but <i>j</i>, score fold <i>j</i> by its mean ln
+        <i>p̂</i><sub>&minus;<i>j</i></sub>, average over folds, and keep
+        the <i>h</i> with the highest score.</p>
+      <div class="formula">
+        score(<i>h</i>) = <span class="frac"><span>1</span><span><i>k</i></span></span>
+        &sum;<sub><i>j</i></sub> mean<sub><i>x<sub>i</sub></i> &isin; fold
+        <i>j</i></sub> ln <i>p̂</i><sub>&minus;<i>j</i></sub>(<i>x<sub>i</sub></i>)
+      </div>
+      <p class="muted">Scott's rule <i>h</i> = &sigma;<i>n</i><sup>&minus;1/5</sup>
+        (Scott 1992), with &sigma; the samples' standard deviation, is a
+        quick first guess built for Gaussian-shaped data; it is where the
+        tab starts. The green curve scores <i>p̂</i> on new data from the
+        truth, &int;<i>p</i> ln <i>p̂</i>, which only a known truth
+        allows.</p>
+    </div>
+
+    <div>
+      <h3>Try this</h3>
+      <ul class="try" data-show="bumps">
+        <li>Slide <i>h</i> from 0.05 up to 5. How many peaks does
+          <i>p̂</i> have at each end?
+          <details class="answer"><summary>Answer</summary>
+            On <em>six points</em> with the Gaussian kernel: six
+            spikes, one per sample, until <i>h</i> &asymp; 0.2; one wide
+            bump from <i>h</i> &asymp; 1 on. In between, the samples that
+            sit close together merge first: at <i>h</i> = 0.6 the four on
+            the left are one hump and the two on the right another.</details>
+        </li>
+        <li>Watch <em>area under p̂</em> while you drag samples and change
+          <i>h</i> or the kernel. Why does it never move?
+          <details class="answer"><summary>Answer</summary>Each bump
+            <i>K<sub>h</sub></i>(<i>x</i> &minus; <i>x<sub>i</sub></i>) is a
+            pdf, area 1: shrinking <i>h</i> makes it narrower and taller by
+            the same factor. Each enters with weight 1/<i>n</i>, and
+            <i>n</i> areas of 1/<i>n</i> add to 1.</details>
+        </li>
+        <li>Pick <em>tophat</em>. What shape is <i>p̂</i>, and where does
+          it jump?
+          <details class="answer"><summary>Answer</summary>A staircase.
+            Each sample adds a box of width 2<i>h</i> and height
+            1/(2<i>nh</i>), so <i>p̂</i>(<i>x</i>) = (samples within
+            <i>h</i> of <i>x</i>) / (2<i>nh</i>), and it jumps at every
+            <i>x<sub>i</sub></i> &plusmn; <i>h</i>. It is a histogram whose
+            bin of width 2<i>h</i> is centered on <i>x</i> instead of fixed
+            in advance.</details>
+        </li>
+        <li>Press <em>Draw one</em> a few times, then <em>Draw 100</em>.
+          How is each draw made, and where do the draws pile up?
+          <details class="answer"><summary>Answer</summary>Pick a sample at
+            random (chance 1/<i>n</i> each), then add <i>h</i> times a draw
+            from <i>K</i>: the new point lands under that sample's bump.
+            That is exactly a draw from <i>p̂</i>, so the histogram of many
+            draws traces <i>p̂</i>.</details>
+        </li>
+      </ul>
+      <ul class="try" data-show="bins">
+        <li>On <em>two humps</em>, drag the bin count from 2 up to 200 and
+          watch the histogram's distance from the truth.
+          <details class="answer"><summary>Answer</summary>
+            Too few bins blur the humps into blocks (2 bins: about
+            0.4); too many give a jagged skyline of empty and overfull bins,
+            "gap teeth" (200 bins: about 0.16). The best is in between,
+            around 25 to 30 bins (about 0.07). The KDE beats it: about 0.05
+            for <i>h</i> near 0.2 to 0.3.</details>
+        </li>
+        <li>Set about 10 bins and drag <em>shift</em>. What changes, and
+          what does the KDE have in its place?
+          <details class="answer"><summary>Answer</summary>The samples stay
+            put, yet the histogram's shape changes: where the edges fall is
+            a second, arbitrary choice. The KDE has no edges to place; each
+            bump sits on its own sample.</details>
+        </li>
+        <li>Press <em>tophat, h = w/2</em>, then switch the kernel to
+          <em>Gaussian</em> at the same <i>h</i>.
+          <details class="answer"><summary>Answer</summary>
+            The tophat KDE is a histogram whose bin, of the same
+            width <i>w</i> = 2<i>h</i>, slides along centered on <i>x</i>:
+            the same blockiness, but no edges to place, and already a bit
+            closer to the truth. The Gaussian kernel at the same <i>h</i>
+            smooths away the steps and gets closer still.</details>
+        </li>
+        <li>Pick <em>flat, hard edges</em>. What does every kernel do at
+          &plusmn;2?
+          <details class="answer"><summary>Answer</summary>Each sample
+            near an edge spills part of its bump past it, so
+            <i>p̂</i> ramps down over a few <i>h</i> around the edge
+            instead of dropping straight to 0. A smaller <i>h</i> narrows
+            the ramp but makes the flat top noisier.</details>
+        </li>
+      </ul>
+      <ul class="try" data-show="cv">
+        <li>Drag <i>h</i> all the way left on the chart. Why does the training
+          score climb forever while the held-out score falls?
+          <details class="answer"><summary>Answer</summary>Each training
+            sample sits under its own bump, of height
+            <i>K</i>(0)/(<i>nh</i>), which grows without bound as <i>h</i>
+            &rarr; 0: the training score rewards memorizing the samples. A
+            held-out sample has no bump of its own, so as the bumps shrink
+            onto the training samples, <i>p̂</i> at the held-out samples
+            falls toward 0.</details>
+        </li>
+        <li>Compare Scott's rule with the CV best on <em>two humps</em>,
+          then on <em>one bell</em>.
+          <details class="answer"><summary>Answer</summary>
+            On one bell they roughly agree (both near 0.3): Scott's
+            rule is built for Gaussian-shaped data. On two humps Scott's
+            &sigma; counts the gap between the humps as spread, so it
+            gives about 0.85 and flattens the humps, while CV picks about
+            0.4. Check the green curve: CV's pick sits near the
+            new-data peak.</details>
+        </li>
+        <li>Pick <em>tophat</em> and <em>fold 1</em>, then slide <i>h</i>
+          down. Where does the held-out curve end, and why?
+          <details class="answer"><summary>Answer</summary>Once some
+            held-out sample has no training sample within <i>h</i>, its box
+            misses every bump: <i>p̂</i> = 0 there (a red dot), ln 0 =
+            &minus;&infin;, and so is the fold's mean. With <em>all
+            samples</em>, the 5-fold curve starts near 0.7 on two humps: a
+            single lonely tail sample is enough to zero its fold, so CV
+            ends up at the smallest <i>h</i> that reaches every sample. The
+            Gaussian kernel is never exactly 0, so its curve falls steeply
+            but never ends.</details>
+        </li>
+        <li>Pick <em>sharp peak, wide base</em> and press <em>h = CV
+          best</em>. How well does one <i>h</i> serve both parts?
+          <details class="answer"><summary>Answer</summary>Not well. The
+            peak (standard deviation 0.15) wants <i>h</i> well under 0.15,
+            the thin tails a big <i>h</i>. Depending on the draw, CV
+            blunts the peak (<i>h</i> near 0.4) or leaves wiggles in the
+            tails (<i>h</i> near 0.15); press <em>New samples</em> to see
+            both. One <i>h</i> for the whole line is the method's
+            limit.</details>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================================================== bumps tab -->
+  <main class="panel" data-show="bumps">
+    <div class="stage card">
+      <div class="stage-head">
+        <span class="key"><i class="ln phat"></i><span><i>p̂</i>(<i>x</i>),
+          the average</span></span>
+        <span class="key"><i class="ln bump"></i><span>each bump
+          <i>K<sub>h</sub></i>(<i>x</i> &minus; <i>x<sub>i</sub></i>) /
+          <i>n</i></span></span>
+        <span class="key"><i class="dot sam"></i><span>samples (drag
+          them)</span></span>
+      </div>
+      <svg id="u-plot" viewBox="0 0 900 480" aria-label="samples on a line,
+        a bump on each, and their average p-hat"></svg>
+      <p class="hint">Drag a sample; click empty space to add one;
+        double-click a sample, or drag it below the plot, to remove it.
+        Hover to write <i>p̂</i>(<i>x</i>) out as its sum.</p>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Samples, kernel, bandwidth</h2>
+        <div class="seg wrap" id="u-presets"></div>
+        <h3>Kernel <i>K</i></h3>
+        <div class="seg wrap" id="u-kern"></div>
+        <label class="slider"><span>bandwidth <i>h</i></span>
+          <span class="pair"><input type="range" id="u-hr"><input
+            type="number" id="u-h" min="0.05" max="5" step="0.05"></span></label>
+        <h3>Bumps</h3>
+        <div class="seg" id="u-view"></div>
+      </div>
+
+      <div class="card readout">
+        <h3>At the pointer</h3>
+        <div id="u-at"></div>
+      </div>
+
+      <div class="card readout">
+        <h3>Totals</h3>
+        <div id="u-sum"></div>
+      </div>
+
+      <div class="card readout">
+        <h3>Draw from <i>p̂</i></h3>
+        <p class="muted">Pick a sample at random, then add <i>h</i> times a
+          draw <i>u</i> from <i>K</i>.</p>
+        <div class="buttons">
+          <button id="u-draw1">Draw one</button>
+          <button id="u-draw100">Draw 100</button>
+          <button id="u-clear">Clear</button>
+        </div>
+        <div id="u-last"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ====================================================== bins tab -->
+  <main class="panel" data-show="bins">
+    <div class="stage card">
+      <div class="stage-head">
+        <span class="key"><i class="dot hb"></i><span>histogram</span></span>
+        <span class="key"><i class="ln kde"></i><span>KDE <i>p̂</i></span></span>
+        <span class="key"><i class="ln truth"></i><span>true pdf
+          <i>p</i></span></span>
+        <span class="key"><i class="ln rugk"></i><span>samples</span></span>
+      </div>
+      <svg id="v-plot" viewBox="0 0 900 610" aria-label="a histogram and a
+        kernel density estimate of the same samples, with the true pdf"></svg>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Samples from a hidden pdf</h2>
+        <div class="seg wrap" id="v-truths"></div>
+        <label class="slider"><span>samples <i>n</i></span>
+          <span class="pair"><input type="range" id="v-nr"><input
+            type="number" id="v-n" min="20" max="2000" step="10"></span></label>
+        <div class="buttons"><button id="v-new">New samples</button></div>
+        <label class="check"><input type="checkbox" id="v-truth"><span>show
+          the true pdf</span></label>
+      </div>
+
+      <div class="card readout">
+        <h3>Histogram</h3>
+        <label class="slider"><span>bins</span>
+          <span class="pair"><input type="range" id="v-br"><input
+            type="number" id="v-b" min="2" max="200" step="1"></span></label>
+        <label class="slider"><span>shift (in bins)</span>
+          <span class="pair"><input type="range" id="v-or" min="0" max="0.99"
+            step="0.01"><input type="number" id="v-o" min="0" max="0.99"
+            step="0.05"></span></label>
+        <div id="v-hread"></div>
+      </div>
+
+      <div class="card readout">
+        <h3>KDE</h3>
+        <div class="seg wrap" id="v-kern"></div>
+        <label class="slider"><span>bandwidth <i>h</i></span>
+          <span class="pair"><input type="range" id="v-hr"><input
+            type="number" id="v-h" min="0.01" max="3" step="0.01"></span></label>
+        <div class="buttons">
+          <button id="v-scott">h = Scott's rule</button>
+          <button id="v-match">tophat, h = w/2</button>
+        </div>
+        <div id="v-kread"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ======================================================== cv tab -->
+  <main class="panel" data-show="cv">
+    <div class="stage card">
+      <div class="stage-head">
+        <span class="key"><i class="ln kde"></i><span><i>p̂</i> at the
+          chosen <i>h</i></span></span>
+        <span class="key"><i class="ln truth"></i><span>true pdf</span></span>
+        <span class="key"><i class="dot held"></i><span>held-out
+          fold</span></span>
+      </div>
+      <svg id="c-plot" viewBox="0 0 900 310" aria-label="the KDE at the
+        chosen bandwidth, with the samples"></svg>
+      <div class="stage-head">
+        <span class="key"><i class="ln train"></i><span>training
+          samples</span></span>
+        <span class="key"><i class="ln held"></i><span>held-out
+          (<i>k</i>-fold)</span></span>
+        <span class="key"><i class="ln fresh"></i><span>new data from the
+          truth</span></span>
+      </div>
+      <svg id="c-chart" viewBox="0 0 900 350" class="pick" aria-label="mean
+        log-likelihood against bandwidth: training, held-out and new
+        data"></svg>
+      <p class="hint">Click or drag on the lower chart to choose
+        <i>h</i>.</p>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Samples from a hidden pdf</h2>
+        <div class="seg wrap" id="c-truths"></div>
+        <label class="slider"><span>samples <i>n</i></span>
+          <span class="pair"><input type="range" id="c-nr"><input
+            type="number" id="c-n" min="30" max="1000" step="10"></span></label>
+        <div class="buttons"><button id="c-new">New samples</button></div>
+        <h3>Kernel <i>K</i></h3>
+        <div class="seg wrap" id="c-kern"></div>
+        <div class="inline"><span>folds <i>k</i></span>
+          <div class="seg" id="c-k"></div></div>
+        <label class="check"><input type="checkbox" id="c-truth"><span>show
+          the true pdf</span></label>
+        <label class="check"><input type="checkbox" id="c-new-on"><span>show
+          the new-data curve</span></label>
+      </div>
+
+      <div class="card readout">
+        <h3>Mean ln <i>p̂</i> at <i>h</i> (nats)</h3>
+        <label class="slider"><span>bandwidth <i>h</i></span>
+          <span class="pair"><input type="range" id="c-hr"><input
+            type="number" id="c-h" min="0.002" max="5" step="0.01"></span></label>
+        <div id="c-read"></div>
+        <div class="buttons">
+          <button id="c-hs">h = Scott's rule</button>
+          <button id="c-hb">h = CV best</button>
+        </div>
+        <div id="c-marks"></div>
+      </div>
+
+      <div class="card readout">
+        <h3>Show a fold</h3>
+        <div class="seg wrap" id="c-folds"></div>
+        <div id="c-foldnote"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    One of a set of &ldquo;visually&rdquo; demos.
+    &middot;
+    <a href="https://github.com/matthigger/kde">Source on GitHub</a>
+    &middot;
+    <span id="build"></span>
+  </footer>
+
+  <script src="js/version.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/kde.js"></script>
+  <script src="js/bumps.js"></script>
+  <script src="js/bins.js"></script>
+  <script src="js/cv.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

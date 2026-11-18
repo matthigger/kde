@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>KDE engine check</title>
+  <style>body { font: 14px/1.4 ui-monospace, monospace; margin: 16px; }</style>
+</head>
+<body>
+  <!-- Compares js/kde.js with sklearn (test/ref.js, made by
+       build/make_ref.py), then checks the kernel and truth samplers by
+       their moments and the truths and p̂ by their areas. -->
+  <pre id="out">running</pre>
+  <script>const BUILD = null;</script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/kde.js"></script>
+  <script src="ref.js"></script>
+  <script>
+    (() => {
+      const lines = [];
+      let bad = 0;
+      // Both -inf (null in the JSON) counts as a match.
+      const maxErr = (a, b) => Math.max(...a.map((v, i) => {
+        const w = b[i] === null ? -Infinity : b[i];
+        return v === w ? 0 : Math.abs(v - w);
+      }));
+      const check = (name, err, tol) => {
+        const ok = err < tol;
+        if (!ok) bad++;
+        lines.push(`${ok ? "PASS" : "FAIL"} ${name.padEnd(44)} err ${
+          Number.isFinite(err) ? err.toExponential(1) : err}`);
+      };
+
+      for (const c of REF.density) {
+        const tag = `ln p̂ ${c.kern} h=${c.h}`;
+        const ln = Array.from(scoreGrid(c.x, [0], [c.h], c.kern)).length &&
+          c.probe.map(t => scoreGrid(c.x, [t], [c.h], c.kern)[0]);
+        check(`${tag} (log-space) vs sklearn`, maxErr(ln, c.ln), 1e-9);
+        if (c.h >= .1) {
+          const p = kdePdf(c.x, c.h, c.kern, c.probe);
+          check(`${tag} (kdePdf) vs sklearn`,
+            maxErr(Array.from(p, Math.log), c.ln), 1e-9);
+        }
+      }
+
+      for (const c of REF.cv) {
+        const cv = cvScores(c.x, Int32Array.from(c.folds), c.k, c.hs, c.kern);
+        check(`CV ${c.kern} mean held-out vs sklearn`,
+          maxErr(Array.from(cv.mean), c.mean), 1e-9);
+        check(`Scott's rule (n = ${c.x.length})`,
+          Math.abs(scottH(c.x) - c.scott), 1e-12);
+      }
+
+      // Kernels: area 1 (the trapezoid rule is off by a step at a jump), and draws with mean 0 and the kernel's variance.
+      const rng = mulberry32(42), N = 200000;
+      for (const k of KERNEL_ORDER) {
+        const K = KERNELS[k], us = linspace(-30, 30, 120001);
+        check(`kernel ${k}: area 1`,
+          Math.abs(trapz(us, us.map(K.k)) - 1), 1e-3);
+        let m = 0, v = 0;
+        for (let i = 0; i < N; i++) { const u = K.draw(rng); m += u; v += u * u; }
+        m /= N;
+        v = v / N - m * m;
+        check(`kernel ${k}: draws' variance ${K.var.toFixed(4)}`,
+          Math.abs(v - K.var) / K.var + Math.abs(m), .03);
+      }
+
+      // Truths: area 1, and draws whose mean matches the pdf's.
+      for (const [name, T] of Object.entries(TRUTHS)) {
+        const xs = linspace(T.grid[0], T.grid[1], 40001);
+        const p = xs.map(T.pdf);
+        check(`truth ${name}: area 1`, Math.abs(trapz(xs, p) - 1), 2e-3);
+        const mu = trapz(xs, xs.map((x, j) => x * p[j]));
+        const d = drawTruth(name, 100000, 3);
+        const m = d.reduce((a, b) => a + b, 0) / d.length;
+        check(`truth ${name}: draws' mean ${mu.toFixed(3)}`,
+          Math.abs(m - mu), .03);
+      }
+
+      // p̂ has area 1 for every kernel.
+      const x = [.5, 1.3, 1.7, 2.2, 4, 5.2];
+      for (const k of KERNEL_ORDER) {
+        const xs = linspace(-40, 46, 200001);
+        check(`p̂ ${k}: area 1`,
+          Math.abs(trapz(xs, kdePdf(x, .6, k, xs)) - 1), 1e-4);
+      }
+
+      // Folds: sizes differ by at most one.
+      const f = foldIds(103, 5, 7), sz = [0, 0, 0, 0, 0];
+      f.forEach(j => sz[j]++);
+      check("fold sizes 103 / 5", Math.max(...sz) - Math.min(...sz), 1.5);
+
+      lines.push(bad ? `${bad} FAILED` : "ALL PASS");
+      document.getElementById("out").textContent = lines.join("\n");
+      document.title = bad ? "FAIL" : "PASS";
+    })();
+  </script>
+</body>
+</html>
